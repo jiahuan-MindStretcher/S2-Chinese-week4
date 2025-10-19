@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -14,6 +13,7 @@
             --text-color: #212529;
             --border-color: #dee2e6;
             --placeholder-color: #6c757d;
+            --error-color: #dc3545;
             --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
 
@@ -134,6 +134,38 @@
             color: var(--placeholder-color);
             font-style: italic;
         }
+        
+        #ai-response-output.typing::after {
+            content: '▋';
+            animation: blink 1s step-end infinite;
+            margin-left: 2px;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        @keyframes blink {
+            from, to { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .error-message {
+            color: var(--error-color);
+        }
+        .error-message strong {
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+        .error-details {
+            font-family: monospace;
+            font-size: 0.85em;
+            background: #f8d7da;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            word-break: break-all;
+        }
 
         footer {
             text-align: center;
@@ -145,6 +177,7 @@
         }
 
     </style>
+<link rel="stylesheet" href="/index.css">
 </head>
 <body>
 
@@ -183,88 +216,91 @@
         </main>
 
         <footer>
-            <p>技术支持：Hugging Face Transformers.js | 模型：Xenova/gpt2-chinese-cluecorpussmall</p>
+            <p>技术支持：Google Gemini API</p>
         </footer>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@2.17.0"></script>
-
     <script type="module">
-      // Import the pipeline function from the Hugging Face Transformers.js library CDN.
-      const { pipeline } = transformers;
+      import { GoogleGenAI } from 'https://esm.run/@google/genai';
 
-      // Get references to the necessary DOM elements.
       const questionInput = document.getElementById('question-input');
       const answerInput = document.getElementById('answer-input');
       const generateButton = document.getElementById('generate-reply-button');
       const aiResponseOutput = document.getElementById('ai-response-output');
 
-      // This variable will hold the loaded model pipeline.
-      // It is initialized to null and will be loaded on the first click.
-      let generator = null;
+      function typewriterEffect(element, text, speed = 40) {
+        return new Promise(resolve => {
+            element.innerHTML = '';
+            element.classList.add('typing');
+            let i = 0;
+            const timer = setInterval(() => {
+                if (i < text.length) {
+                    element.textContent += text.charAt(i);
+                    i++;
+                } else {
+                    clearInterval(timer);
+                    element.classList.remove('typing');
+                    resolve();
+                }
+            }, speed);
+        });
+      }
 
-      // Add a click event listener to the button. The function is async to handle model loading and generation.
       generateButton.addEventListener('click', async () => {
         const questionText = questionInput.value.trim();
         const answerText = answerInput.value.trim();
 
-        // Basic validation to ensure the user has provided a reply.
         if (!answerText) {
             alert('请在“您的回复”区域输入内容。');
             return;
         }
         
-        // Disable the button and show a status message to the user.
         generateButton.disabled = true;
-        aiResponseOutput.innerHTML = '<p class="placeholder">正在准备AI...</p>';
+        aiResponseOutput.classList.remove('typing');
+        aiResponseOutput.innerHTML = '<p class="placeholder">正在生成AI回复...</p>';
 
         try {
-            // Lazy-load the model on the first click.
-            if (generator === null) {
-                aiResponseOutput.innerHTML = '<p class="placeholder">首次加载中文AI模型，请稍候...（此过程可能需要一些时间）</p>';
-                // Load the text-generation pipeline with the specified Chinese model.
-                generator = await pipeline('text-generation', 'Xenova/gpt2-chinese-cluecorpussmall');
-            }
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-            aiResponseOutput.innerHTML = '<p class="placeholder">模型准备就绪，正在生成回复...</p>';
+            const prompt = `这是一个邮件对话。第一封邮件是提问，第二封是回复。请你扮演第一封邮件的发件人，根据对话内容，写第三封邮件，确保回复中的人名和语气与前两封邮件保持一致。
 
-            // Construct the prompt exactly as specified.
-            const promptLines = [
-    '这是一个邮件对话。第一封邮件是提问，第二封是回复。请你扮演第一封邮件的发件人，根据对话内容，写第三封邮件，确保回复中的人名和语气与前两封邮件保持一致。',
-    '', // This creates a blank line
-    '第一封邮件：' + questionText,
-    '', // This creates a blank line
-    '第二封邮件：' + answerText,
-    '', // This creates a blank line
-    '第三封邮件回复：'
-];
-const prompt = promptLines.join('\n'); // This combines the lines with a clean newline character
+第一封邮件：
+${questionText}
 
-            // Call the generator with the prompt and generation options.
-            const output = await generator(prompt, {
-                max_new_tokens: 250, // Limit the length of the reply.
-                temperature: 0.7, // Add some creativity.
-                top_k: 50,
-                skip_special_tokens: true // Clean up the output.
+第二封邮件：
+${answerText}
+
+第三封邮件回复：`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
             });
 
-            // The model output includes the original prompt, so we extract just the newly generated text.
-            const fullText = output[0].generated_text;
-            const generatedReply = fullText.split('第三封邮件回复：')[1] || fullText;
+            const generatedReply = response.text.trim();
             
-            // Display the cleaned-up reply.
-            aiResponseOutput.innerText = generatedReply.trim();
+            if (!generatedReply) {
+                throw new Error("AI模型返回了空的或无效的回复。");
+            }
+            
+            await typewriterEffect(aiResponseOutput, generatedReply);
 
         } catch (error) {
-            // Display any errors to the user.
-            console.error('Error generating reply:', error);
-            aiResponseOutput.innerText = `生成回复时发生错误：\n${error.message}`;
+            console.error('Error during AI operation:', error);
+            aiResponseOutput.classList.remove('typing');
+            aiResponseOutput.innerHTML = `
+                <div class="error-message">
+                    <strong>生成回复时发生错误</strong>
+                    <p>请检查您的网络连接并重试。如果问题持续，请确保API密钥配置正确。</p>
+                    <div class="error-details">${error.message}</div>
+                </div>
+            `;
         } finally {
-            // Re-enable the button regardless of success or failure.
             generateButton.disabled = false;
         }
       });
     </script>
 
+<script type="module" src="/index.tsx"></script>
 </body>
 </html>
