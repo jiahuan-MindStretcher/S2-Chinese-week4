@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邮件回复模拟器 (Email Reply Simulator)</title>
-    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@2.17.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@2.17.0" defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
@@ -170,30 +170,25 @@
     </div>
 
     <script>
-        // Immediately check if the library is loaded
-        if (typeof transformers === 'undefined') {
-            console.error('Hugging Face Transformers.js library not loaded.');
-            // Defer DOM manipulation until the document is loaded
-            document.addEventListener('DOMContentLoaded', () => {
-                const generateButton = document.getElementById('generate-reply-button');
-                const aiResponseOutput = document.getElementById('ai-response-output');
-                if (generateButton) {
-                    generateButton.disabled = true;
-                    generateButton.textContent = '错误：库加载失败';
-                }
-                if (aiResponseOutput) {
-                    aiResponseOutput.textContent = '无法加载核心 AI 库。请检查您的网络连接并刷新页面。';
-                    aiResponseOutput.style.color = 'var(--error-text)';
-                }
-            });
-        } else {
-            // Run the main app logic only if the library is available
-            const { pipeline } = transformers;
-
+        // Wrap all logic in DOMContentLoaded to ensure the page and deferred scripts are fully loaded.
+        document.addEventListener('DOMContentLoaded', () => {
             const questionInput = document.getElementById('question-input');
             const answerInput = document.getElementById('answer-input');
             const generateButton = document.getElementById('generate-reply-button');
             const aiResponseOutput = document.getElementById('ai-response-output');
+
+            // First, check if the Transformers.js library loaded successfully.
+            if (typeof transformers === 'undefined') {
+                console.error('Hugging Face Transformers.js library not loaded.');
+                generateButton.disabled = true;
+                generateButton.textContent = '错误：库加载失败';
+                aiResponseOutput.textContent = '无法加载核心 AI 库。请检查您的网络连接并刷新页面。';
+                aiResponseOutput.style.color = 'var(--error-text)';
+                return; // Stop execution if the library is missing.
+            }
+
+            // If we're here, the library and DOM are ready.
+            const { pipeline } = transformers;
 
             questionInput.value = `你好，
 
@@ -295,7 +290,7 @@
                     aiResponseOutput.classList.remove('loading-text');
                 }
             });
-        }
+        });
     </script>
 <script type="module" src="/index.tsx"></script>
 </body>
