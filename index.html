@@ -1,306 +1,264 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>动态邮件回复模拟器</title>
+    <title>邮件回复模拟器 (Email Reply Simulator)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@2.17.0"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
         :root {
-            --primary-color: #007bff;
-            --primary-hover-color: #0056b3;
-            --background-color: #f8f9fa;
-            --section-background: #ffffff;
-            --text-color: #212529;
-            --border-color: #dee2e6;
-            --placeholder-color: #6c757d;
-            --error-color: #dc3545;
-            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --bg-color: #f0f2f5;
+            --container-bg: #ffffff;
+            --text-color: #1f2937;
+            --primary-color: #3b82f6;
+            --primary-hover-color: #2563eb;
+            --border-color: #d1d5db;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --disabled-bg: #e5e7eb;
+            --disabled-text: #9ca3af;
+            --info-text: #6b7280;
         }
 
         body {
-            font-family: var(--font-family);
-            background-color: var(--background-color);
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
             padding: 2rem;
-            line-height: 1.6;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
         }
 
-        #app {
-            max-width: 1200px;
-            margin: 0 auto;
+        .main-container {
+            width: 100%;
+            max-width: 900px;
+            background-color: var(--container-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px var(--shadow-color), 0 4px 6px -2px var(--shadow-color);
+            padding: 2rem;
             display: flex;
             flex-direction: column;
             gap: 2rem;
-        }
-
-        header {
-            text-align: center;
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 1.5rem;
         }
 
         header h1 {
-            margin: 0;
-            font-size: 2.5rem;
+            font-size: 1.875rem;
+            font-weight: 700;
+            text-align: center;
+            margin: 0 0 1rem 0;
             color: var(--text-color);
         }
 
-        header p {
-            margin-top: 0.5rem;
-            font-size: 1.1rem;
-            color: var(--placeholder-color);
-        }
-
-        main {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-        }
-
-        section {
-            background-color: var(--section-background);
-            padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        .section {
             display: flex;
             flex-direction: column;
+            gap: 0.75rem;
         }
-        
-        h2 {
-            margin-top: 0;
-            margin-bottom: 1rem;
-            font-size: 1.5rem;
-            color: var(--primary-color);
+
+        .section h2 {
+            font-size: 1.25rem;
+            font-weight: 500;
+            margin: 0;
             border-bottom: 1px solid var(--border-color);
             padding-bottom: 0.5rem;
         }
 
         textarea {
             width: 100%;
-            flex-grow: 1;
             padding: 0.75rem;
-            font-size: 1rem;
             border: 1px solid var(--border-color);
-            border-radius: 4px;
+            border-radius: 8px;
+            font-family: 'Noto Sans SC', sans-serif;
+            font-size: 1rem;
             resize: vertical;
-            min-height: 250px;
-            box-sizing: border-box;
-            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            box-sizing: border-box; /* Ensures padding doesn't affect width */
         }
 
         textarea:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        #question-input {
+            height: 150px;
+        }
+
+        #answer-input {
+            height: 80px;
         }
 
         #generate-reply-button {
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-            font-weight: bold;
-            color: #fff;
             background-color: var(--primary-color);
+            color: white;
+            font-size: 1rem;
+            font-weight: 500;
+            padding: 0.75rem 1.5rem;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             cursor: pointer;
-            transition: background-color 0.2s ease-in-out;
-            margin-bottom: 1rem;
+            transition: background-color 0.2s, transform 0.1s;
+            align-self: flex-start;
         }
 
         #generate-reply-button:hover:not(:disabled) {
             background-color: var(--primary-hover-color);
+            transform: translateY(-1px);
+        }
+        
+        #generate-reply-button:active:not(:disabled) {
+            transform: translateY(0);
         }
 
         #generate-reply-button:disabled {
-            background-color: #6c757d;
+            background-color: var(--disabled-bg);
+            color: var(--disabled-text);
             cursor: not-allowed;
-            opacity: 0.7;
         }
 
         #ai-response-output {
-            flex-grow: 1;
-            background-color: #f1f3f5;
-            padding: 1rem;
-            border-radius: 4px;
+            background-color: var(--bg-color);
             border: 1px solid var(--border-color);
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            min-height: 250px;
-            overflow-y: auto;
-        }
-
-        #ai-response-output .placeholder {
-            color: var(--placeholder-color);
-            font-style: italic;
+            border-radius: 8px;
+            padding: 1rem;
+            min-height: 120px;
+            white-space: pre-wrap; /* Preserves formatting */
+            line-height: 1.6;
+            color: var(--info-text);
+            transition: background-color 0.3s;
         }
         
-        #ai-response-output.typing::after {
-            content: '▋';
-            animation: blink 1s step-end infinite;
-            margin-left: 2px;
-            font-weight: bold;
-            color: var(--primary-color);
+        .loading-text {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
 
-        @keyframes blink {
-            from, to { opacity: 1; }
-            50% { opacity: 0; }
+        @keyframes pulse {
+            50% {
+                opacity: .5;
+            }
         }
-
-        .error-message {
-            color: var(--error-color);
-        }
-        .error-message strong {
-            display: block;
-            margin-bottom: 0.5rem;
-        }
-        .error-details {
-            font-family: monospace;
-            font-size: 0.85em;
-            background: #f8d7da;
-            padding: 0.5rem;
-            border-radius: 4px;
-            margin-top: 1rem;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-            word-break: break-all;
-        }
-
-        footer {
-            text-align: center;
-            margin-top: 2rem;
-            padding-top: 1.5rem;
-            border-top: 2px solid var(--border-color);
-            color: var(--placeholder-color);
-            font-size: 0.9rem;
-        }
-
     </style>
 <link rel="stylesheet" href="/index.css">
 </head>
 <body>
-
-    <div id="app">
+    <div class="main-container">
         <header>
-            <h1>动态邮件回复模拟器</h1>
-            <p>练习中文邮件写作，并获得即时AI反馈</p>
+            <h1>邮件回复模拟器</h1>
         </header>
 
-        <main>
-            <section id="question-section">
-                <h2>第一步：来信 (Question)</h2>
-                <textarea id="question-input">小乐：
+        <div class="section">
+            <h2>1. 问题 (Question)</h2>
+            <textarea id="question-input" placeholder="请在此处粘贴收到的邮件..."></textarea>
+        </div>
 
-时间过得真快！我已经升上中二了。最近，我接到一个任务，就是以学长的身份参加“迎新周”活动，帮助中一的新生融入新环境。我感到有点儿紧张，因为我从没有组织过这种活动。我知道你以前也组织过“迎新周”活动，你们是怎么组织这个活动的呢？在组织活动的过程中，我有什么需要注意的呢？
+        <div class="section">
+            <h2>2. 您的回答 (Your Answer)</h2>
+            <textarea id="answer-input" placeholder="请在此处输入您的核心回答..."></textarea>
+        </div>
 
-希望早日收到你的回邮。
-
-祝好！
-
-小明</textarea>
-            </section>
-
-            <section id="answer-section">
-                <h2>第二步：您的回复 (Answer)</h2>
-                <textarea id="answer-input" placeholder="在此输入您对第一封邮件的回复..."></textarea>
-            </section>
-
-            <section id="ai-response-section">
-                <h2>第三步：AI生成的回信 (AI Response)</h2>
-                <button id="generate-reply-button">生成AI回复</button>
-                <div id="ai-response-output">
-                    <p class="placeholder">点击上方按钮，AI将在此生成回复...</p>
-                </div>
-            </section>
-        </main>
-
-        <footer>
-            <p>技术支持：Google Gemini API</p>
-        </footer>
+        <div class="section">
+            <h2>3. AI 生成回复 (AI Response)</h2>
+            <button id="generate-reply-button">生成回复</button>
+            <div id="ai-response-output">AI 生成的邮件回复将显示在这里。</div>
+        </div>
     </div>
 
-    <script type="module">
-      import { GoogleGenAI } from 'https://esm.run/@google/genai';
+    <script>
+        // Import the pipeline function from the global 'transformers' object
+        const { pipeline } = transformers;
 
-      const questionInput = document.getElementById('question-input');
-      const answerInput = document.getElementById('answer-input');
-      const generateButton = document.getElementById('generate-reply-button');
-      const aiResponseOutput = document.getElementById('ai-response-output');
+        // Get DOM elements
+        const questionInput = document.getElementById('question-input');
+        const answerInput = document.getElementById('answer-input');
+        const generateButton = document.getElementById('generate-reply-button');
+        const aiResponseOutput = document.getElementById('ai-response-output');
 
-      function typewriterEffect(element, text, speed = 40) {
-        return new Promise(resolve => {
-            element.innerHTML = '';
-            element.classList.add('typing');
-            let i = 0;
-            const timer = setInterval(() => {
-                if (i < text.length) {
-                    element.textContent += text.charAt(i);
-                    i++;
-                } else {
-                    clearInterval(timer);
-                    element.classList.remove('typing');
-                    resolve();
+        // Pre-fill the question textarea with a default email
+        questionInput.value = `你好，
+
+感谢你对我们上次会议的跟进。
+
+我想确认一下，我们是否可以在下周三下午3点再次开会，讨论项目下一步的计划？
+
+期待你的回复。
+
+祝好，
+[发件人姓名]`;
+
+        // Variable to hold the loaded model pipeline. Initially null.
+        let generator = null;
+
+        // Add click event listener to the button
+        generateButton.addEventListener('click', async () => {
+            // Disable the button and prepare UI for generation
+            generateButton.disabled = true;
+            generateButton.textContent = '生成中...';
+            aiResponseOutput.style.color = 'var(--info-text)';
+            aiResponseOutput.classList.remove('loading-text');
+
+
+            try {
+                // Step 1: Check if the model is loaded. If not, load it.
+                if (generator === null) {
+                    aiResponseOutput.textContent = '首次加载快速AI模型 (约27MB)，请稍候...';
+                    aiResponseOutput.classList.add('loading-text');
+                    
+                    // Load the model and store the pipeline instance
+                    generator = await pipeline('text-generation', 'Xenova/distilgpt2-chinese');
+                    
+                    aiResponseOutput.textContent = '模型加载完毕！';
+                    aiResponseOutput.classList.remove('loading-text');
                 }
-            }, speed);
-        });
-      }
+                
+                // Step 2: Get user input and construct the prompt
+                const questionText = questionInput.value.trim();
+                const answerText = answerInput.value.trim();
 
-      generateButton.addEventListener('click', async () => {
-        const questionText = questionInput.value.trim();
-        const answerText = answerInput.value.trim();
+                if (!questionText || !answerText) {
+                    aiResponseOutput.textContent = '“问题”和“您的回答”都不能为空。';
+                    return; // Exit early if inputs are empty
+                }
 
-        if (!answerText) {
-            alert('请在“您的回复”区域输入内容。');
-            return;
-        }
-        
-        generateButton.disabled = true;
-        aiResponseOutput.classList.remove('typing');
-        aiResponseOutput.innerHTML = '<p class="placeholder">正在生成AI回复...</p>';
+                // A more structured prompt for better results
+                const prompt = `原始邮件：\n${questionText}\n\n我的核心回答：\n${answerText}\n\n根据以上信息，生成一封专业且礼貌的中文邮件回复：\n`;
 
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                aiResponseOutput.textContent = '正在生成回复，请稍候...';
+                aiResponseOutput.classList.add('loading-text');
 
-            const prompt = `这是一个邮件对话。第一封邮件是提问，第二封是回复。请你扮演第一封邮件的发件人，根据对话内容，写第三封邮件，确保回复中的人名和语气与前两封邮件保持一致。
+                // Step 3: Generate text using the model
+                const output = await generator(prompt, {
+                    max_new_tokens: 150, // Limit the length of the generated reply
+                    num_return_sequences: 1,
+                    temperature: 0.7,
+                    top_k: 50,
+                    do_sample: true,
+                });
+                
+                // Step 4: Process and display the result
+                const generatedText = output[0].generated_text;
+                // The model often includes the prompt in its output, so we slice it off.
+                const reply = generatedText.slice(prompt.length).trim();
+                
+                aiResponseOutput.textContent = reply;
+                aiResponseOutput.style.color = 'var(--text-color)'; // Change text color for the final result
 
-第一封邮件：
-${questionText}
-
-第二封邮件：
-${answerText}
-
-第三封邮件回复：`;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-            });
-
-            const generatedReply = response.text.trim();
-            
-            if (!generatedReply) {
-                throw new Error("AI模型返回了空的或无效的回复。");
+            } catch (error) {
+                console.error('Error during AI generation:', error);
+                aiResponseOutput.textContent = '生成回复时发生错误，请查看控制台获取更多信息。';
+            } finally {
+                // Re-enable the button regardless of success or failure
+                generateButton.disabled = false;
+                generateButton.textContent = '生成回复';
+                aiResponseOutput.classList.remove('loading-text');
             }
-            
-            await typewriterEffect(aiResponseOutput, generatedReply);
-
-        } catch (error) {
-            console.error('Error during AI operation:', error);
-            aiResponseOutput.classList.remove('typing');
-            aiResponseOutput.innerHTML = `
-                <div class="error-message">
-                    <strong>生成回复时发生错误</strong>
-                    <p>请检查您的网络连接并重试。如果问题持续，请确保API密钥配置正确。</p>
-                    <div class="error-details">${error.message}</div>
-                </div>
-            `;
-        } finally {
-            generateButton.disabled = false;
-        }
-      });
+        });
     </script>
-
 <script type="module" src="/index.tsx"></script>
 </body>
 </html>
