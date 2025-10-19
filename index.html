@@ -229,13 +229,16 @@
             aiResponseOutput.innerHTML = '<p class="placeholder">模型准备就绪，正在生成回复...</p>';
 
             // Construct the prompt exactly as specified.
-            const prompt = `这是一个邮件对话。第一封邮件是提问，第二封是回复。请你扮演第一封邮件的发件人，根据对话内容，写第三封邮件，确保回复中的人名和语气与前两封邮件保持一致。
-
-第一封邮件：${questionText}
-
-第二封邮件：${answerText}
-
-第三封邮件回复：`;
+            const promptLines = [
+    '这是一个邮件对话。第一封邮件是提问，第二封是回复。请你扮演第一封邮件的发件人，根据对话内容，写第三封邮件，确保回复中的人名和语气与前两封邮件保持一致。',
+    '', // This creates a blank line
+    '第一封邮件：' + questionText,
+    '', // This creates a blank line
+    '第二封邮件：' + answerText,
+    '', // This creates a blank line
+    '第三封邮件回复：'
+];
+const prompt = promptLines.join('\n'); // This combines the lines with a clean newline character
 
             // Call the generator with the prompt and generation options.
             const output = await generator(prompt, {
