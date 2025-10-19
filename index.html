@@ -246,7 +246,8 @@
             });
 
             // The model output includes the original prompt, so we extract just the newly generated text.
-            const generatedReply = output[0].generated_text.substring(prompt.length);
+            const fullText = output[0].generated_text;
+            const generatedReply = fullText.split('第三封邮件回复：')[1] || fullText;
             
             // Display the cleaned-up reply.
             aiResponseOutput.innerText = generatedReply.trim();
