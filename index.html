@@ -170,17 +170,32 @@
     </div>
 
     <script>
-        // Import the pipeline function from the global 'transformers' object
-        const { pipeline } = transformers;
+        // Immediately check if the library is loaded
+        if (typeof transformers === 'undefined') {
+            console.error('Hugging Face Transformers.js library not loaded.');
+            // Defer DOM manipulation until the document is loaded
+            document.addEventListener('DOMContentLoaded', () => {
+                const generateButton = document.getElementById('generate-reply-button');
+                const aiResponseOutput = document.getElementById('ai-response-output');
+                if (generateButton) {
+                    generateButton.disabled = true;
+                    generateButton.textContent = '错误：库加载失败';
+                }
+                if (aiResponseOutput) {
+                    aiResponseOutput.textContent = '无法加载核心 AI 库。请检查您的网络连接并刷新页面。';
+                    aiResponseOutput.style.color = 'var(--error-text)';
+                }
+            });
+        } else {
+            // Run the main app logic only if the library is available
+            const { pipeline } = transformers;
 
-        // Get DOM elements
-        const questionInput = document.getElementById('question-input');
-        const answerInput = document.getElementById('answer-input');
-        const generateButton = document.getElementById('generate-reply-button');
-        const aiResponseOutput = document.getElementById('ai-response-output');
+            const questionInput = document.getElementById('question-input');
+            const answerInput = document.getElementById('answer-input');
+            const generateButton = document.getElementById('generate-reply-button');
+            const aiResponseOutput = document.getElementById('ai-response-output');
 
-        // Pre-fill the question textarea with a default email
-        questionInput.value = `你好，
+            questionInput.value = `你好，
 
 感谢你对我们上次会议的跟进。
 
@@ -191,92 +206,96 @@
 祝好，
 [发件人姓名]`;
 
-        // Variable to hold the loaded model pipeline. Initially null.
-        let generator = null;
-        
-        // Function to update loading progress UI
-        const loadingProgress = (data) => {
-            aiResponseOutput.style.color = 'var(--info-text)';
-            aiResponseOutput.classList.add('loading-text');
+            let generator = null;
             
-            if (data.status === 'progress') {
-                const progress = data.progress.toFixed(2);
-                aiResponseOutput.textContent = `正在下载模型文件: ${data.file} (${progress}%)`;
-            } else if (data.status === 'done') {
-                aiResponseOutput.textContent = `已完成: ${data.file}`;
-            } else {
-                aiResponseOutput.textContent = `正在加载模型: ${data.status}...`;
-            }
-        };
+            const loadingProgress = (data) => {
+                aiResponseOutput.style.color = 'var(--info-text)';
+                aiResponseOutput.classList.add('loading-text');
+                
+                if (data.status === 'progress') {
+                    const progress = data.progress.toFixed(2);
+                    aiResponseOutput.textContent = `正在下载模型文件: ${data.file} (${progress}%)`;
+                } else if (data.status === 'done') {
+                    aiResponseOutput.textContent = `已完成: ${data.file}`;
+                } else {
+                    aiResponseOutput.textContent = `正在加载模型: ${data.status}...`;
+                }
+            };
 
+            generateButton.addEventListener('click', async () => {
+                const questionText = questionInput.value.trim();
+                const answerText = answerInput.value.trim();
 
-        // Add click event listener to the button
-        generateButton.addEventListener('click', async () => {
-            const questionText = questionInput.value.trim();
-            const answerText = answerInput.value.trim();
+                if (!questionText || !answerText) {
+                    aiResponseOutput.textContent = '“问题”和“您的回答”都不能为空。';
+                    aiResponseOutput.style.color = 'var(--error-text)';
+                    aiResponseOutput.classList.remove('loading-text');
+                    return;
+                }
 
-            // Step 1: Validate inputs first to provide instant feedback
-            if (!questionText || !answerText) {
-                aiResponseOutput.textContent = '“问题”和“您的回答”都不能为空。';
-                aiResponseOutput.style.color = 'var(--error-text)';
-                return; // Exit early if inputs are empty
-            }
+                generateButton.disabled = true;
+                generateButton.textContent = '处理中...';
+                aiResponseOutput.style.color = 'var(--info-text)';
+                aiResponseOutput.classList.remove('loading-text');
 
-            // Disable the button and prepare UI for generation
-            generateButton.disabled = true;
-            generateButton.textContent = '处理中...';
-            aiResponseOutput.style.color = 'var(--info-text)';
-            aiResponseOutput.classList.remove('loading-text');
-
-
-            try {
-                // Step 2: Check if the model is loaded. If not, load it with progress tracking.
-                if (generator === null) {
-                    aiResponseOutput.textContent = '首次加载快速AI模型 (约27MB)，请稍候...';
+                try {
+                    if (generator === null) {
+                        console.log('Model not loaded. Initializing pipeline...');
+                        aiResponseOutput.textContent = '首次加载快速AI模型 (约27MB)，请稍候...';
+                        
+                        generator = await pipeline('text-generation', 'Xenova/distilgpt2-chinese', {
+                            progress_callback: loadingProgress,
+                        });
+                        
+                        console.log('Pipeline initialized successfully.');
+                        aiResponseOutput.textContent = '模型加载完毕！';
+                        aiResponseOutput.classList.remove('loading-text');
+                    }
                     
-                    // Load the model and store the pipeline instance
-                    generator = await pipeline('text-generation', 'Xenova/distilgpt2-chinese', {
-                        progress_callback: loadingProgress,
+                    const prompt = `原始邮件：\n${questionText}\n\n我的核心回答：\n${answerText}\n\n根据以上信息，生成一封专业且礼貌的中文邮件回复：\n`;
+
+                    console.log('Generating response with prompt...');
+                    aiResponseOutput.textContent = '正在生成回复，请稍候...';
+                    aiResponseOutput.classList.add('loading-text');
+
+                    const output = await generator(prompt, {
+                        max_new_tokens: 150,
+                        num_return_sequences: 1,
+                        temperature: 0.7,
+                        top_k: 50,
+                        do_sample: true,
                     });
                     
-                    aiResponseOutput.textContent = '模型加载完毕！';
+                    console.log('Raw model output:', output);
+
+                    if (!output || output.length === 0 || !output[0].generated_text) {
+                        throw new Error('AI模型返回了无效或空的响应。');
+                    }
+
+                    const generatedText = output[0].generated_text;
+                    const reply = generatedText.startsWith(prompt)
+                        ? generatedText.slice(prompt.length).trim()
+                        : generatedText.trim(); // Fallback if prompt is not exactly at the start
+
+                    if (!reply) {
+                        aiResponseOutput.textContent = 'AI 生成了空的回复，请尝试调整您的问题或回答。';
+                        aiResponseOutput.style.color = 'var(--info-text)';
+                    } else {
+                        aiResponseOutput.textContent = reply;
+                        aiResponseOutput.style.color = 'var(--text-color)';
+                    }
+
+                } catch (error) {
+                    console.error('Error during AI generation:', error);
+                    aiResponseOutput.textContent = `生成回复时发生错误：${error.message} 请刷新页面再试一次。`;
+                    aiResponseOutput.style.color = 'var(--error-text)';
+                } finally {
+                    generateButton.disabled = false;
+                    generateButton.textContent = '生成回复';
                     aiResponseOutput.classList.remove('loading-text');
                 }
-                
-                // Step 3: Construct the prompt for the model
-                const prompt = `原始邮件：\n${questionText}\n\n我的核心回答：\n${answerText}\n\n根据以上信息，生成一封专业且礼貌的中文邮件回复：\n`;
-
-                aiResponseOutput.textContent = '正在生成回复，请稍候...';
-                aiResponseOutput.classList.add('loading-text');
-
-                // Step 4: Generate text using the loaded model
-                const output = await generator(prompt, {
-                    max_new_tokens: 150, // Limit the length of the generated reply
-                    num_return_sequences: 1,
-                    temperature: 0.7,
-                    top_k: 50,
-                    do_sample: true,
-                });
-                
-                // Step 5: Process and display the final result
-                const generatedText = output[0].generated_text;
-                // The model often includes the prompt in its output, so we slice it off.
-                const reply = generatedText.slice(prompt.length).trim();
-                
-                aiResponseOutput.textContent = reply;
-                aiResponseOutput.style.color = 'var(--text-color)'; // Use default text color for the result
-
-            } catch (error) {
-                console.error('Error during AI generation:', error);
-                aiResponseOutput.textContent = '生成回复时发生错误，请查看控制台获取更多信息。';
-                aiResponseOutput.style.color = 'var(--error-text)';
-            } finally {
-                // Re-enable the button regardless of success or failure
-                generateButton.disabled = false;
-                generateButton.textContent = '生成回复';
-                aiResponseOutput.classList.remove('loading-text');
-            }
-        });
+            });
+        }
     </script>
 <script type="module" src="/index.tsx"></script>
 </body>
