@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邮件回复模拟器 (Email Reply Simulator)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/huggingface-transformers/2.17.0/transformers.min.js" defer></script>
+    <!-- Load the Transformers.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers@2.17.0"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
@@ -170,24 +171,21 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        // Main application logic, wrapped in a self-invoking async function to handle setup.
+        (async () => {
+            // Since the library is loaded from a script tag, it attaches itself to the `self.transformers` object.
+            const { pipeline } = self.transformers;
+
+            // Get references to DOM elements.
             const questionInput = document.getElementById('question-input');
             const answerInput = document.getElementById('answer-input');
             const generateButton = document.getElementById('generate-reply-button');
             const aiResponseOutput = document.getElementById('ai-response-output');
 
-            if (typeof transformers === 'undefined') {
-                console.error('Hugging Face Transformers.js library not loaded.');
-                generateButton.disabled = true;
-                generateButton.textContent = '错误：库加载失败';
-                aiResponseOutput.textContent = '无法加载核心 AI 库。请检查您的网络连接并刷新页面。如果问题持续存在，您可能处于受限制的网络环境中。';
-                aiResponseOutput.style.color = 'var(--error-text)';
-                return;
-            }
-
-            const { pipeline } = transformers;
+            // A variable to hold the promise of the initialized AI model.
             let generatorPromise = null;
 
+            // Set default email content.
             questionInput.value = `你好，
 
 感谢你对我们上次会议的跟进。
@@ -199,6 +197,7 @@
 祝好，
 [发件人姓名]`;
 
+            // Callback function to display model loading progress.
             const loadingProgress = (data) => {
                 aiResponseOutput.style.color = 'var(--info-text)';
                 if (data.status === 'progress') {
@@ -211,6 +210,7 @@
                 }
             };
 
+            // Asynchronously initializes the text-generation pipeline.
             const initializeModel = async () => {
                 generateButton.disabled = true;
                 generateButton.textContent = '模型加载中...';
@@ -218,50 +218,49 @@
                 aiResponseOutput.classList.add('loading-text');
 
                 try {
+                    // Create the text generation pipeline.
                     const generator = await pipeline('text-generation', 'Xenova/distilgpt2-chinese', {
                         progress_callback: loadingProgress,
                     });
                     
                     console.log('Pipeline initialized successfully.');
                     aiResponseOutput.textContent = '模型加载完毕！AI 生成的邮件回复将显示在这里。';
-                    aiResponseOutput.style.color = 'var(--info-text)';
                     generateButton.disabled = false;
                     generateButton.textContent = '生成回复';
                     
                     return generator;
                 } catch (error) {
                     console.error('Error during model initialization:', error);
-                    aiResponseOutput.textContent = `模型加载失败：${error.message} 请刷新页面再试一次。`;
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    aiResponseOutput.textContent = `模型加载失败：${errorMessage} 请刷新页面再试一次。`;
                     aiResponseOutput.style.color = 'var(--error-text)';
                     generateButton.textContent = '加载失败';
+                    // Re-throw the error to be caught by the outer catch block if necessary.
                     throw error;
                 } finally {
                     aiResponseOutput.classList.remove('loading-text');
                 }
             };
 
-            generatorPromise = initializeModel();
-
-            generateButton.addEventListener('click', async () => {
+            // Main event listener for the generate button.
+            const handleGenerateClick = async () => {
                 const questionText = questionInput.value.trim();
                 const answerText = answerInput.value.trim();
 
                 if (!questionText || !answerText) {
                     aiResponseOutput.textContent = '“问题”和“您的回答”都不能为空。';
                     aiResponseOutput.style.color = 'var(--error-text)';
-                    aiResponseOutput.classList.remove('loading-text');
                     return;
                 }
-
-                // If button is clicked while still loading, it'll wait. 
-                // We show a generic "processing" message.
+                
                 generateButton.disabled = true;
                 generateButton.textContent = '处理中...';
                 
                 try {
+                    // Wait for the model to be initialized.
                     const generator = await generatorPromise;
                     if (!generator) {
-                        throw new Error("AI模型不可用。");
+                        throw new Error("AI模型尚未初始化。");
                     }
 
                     const prompt = `原始邮件：\n${questionText}\n\n我的核心回答：\n${answerText}\n\n根据以上信息，生成一封专业且礼貌的中文邮件回复：\n`;
@@ -271,6 +270,7 @@
                     aiResponseOutput.style.color = 'var(--info-text)';
                     aiResponseOutput.classList.add('loading-text');
 
+                    // Generate text based on the prompt.
                     const output = await generator(prompt, {
                         max_new_tokens: 150,
                         num_return_sequences: 1,
@@ -284,7 +284,8 @@
                     if (!output || output.length === 0 || !output[0].generated_text) {
                         throw new Error('AI模型返回了无效或空的响应。');
                     }
-
+                    
+                    // Process the output to extract only the new reply.
                     const generatedText = output[0].generated_text;
                     const reply = generatedText.startsWith(prompt)
                         ? generatedText.slice(prompt.length).trim()
@@ -300,19 +301,32 @@
 
                 } catch (error) {
                     console.error('Error during AI generation:', error);
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    // Don't overwrite the "loading failed" message if that was the root cause.
                     if (generateButton.textContent !== '加载失败') {
-                        aiResponseOutput.textContent = `生成回复时发生错误：${error.message} 请刷新页面再试一次。`;
+                        aiResponseOutput.textContent = `生成回复时发生错误：${errorMessage}`;
                         aiResponseOutput.style.color = 'var(--error-text)';
                     }
                 } finally {
+                    // Re-enable the button unless loading failed permanently.
                     if (generateButton.textContent !== '加载失败') {
                         generateButton.disabled = false;
                         generateButton.textContent = '生成回复';
                     }
                     aiResponseOutput.classList.remove('loading-text');
                 }
-            });
-        });
+            };
+
+            // Attach the event listener.
+            generateButton.addEventListener('click', handleGenerateClick);
+
+            // Start loading the model as soon as the script runs.
+            try {
+                generatorPromise = initializeModel();
+            } catch (error) {
+                console.error("Failed to start model initialization.", error);
+            }
+        })();
     </script>
 <script type="module" src="/index.tsx"></script>
 </body>
